@@ -18,6 +18,9 @@ Packages a release tag plus every fix branch for Windows and installs the packag
 4. With -TmuxName, also writes -InstallRoot/<version folder>/tmux-bin/tmux.exe as a copy of
    the full helper, for callers that run "tmux".
 
+With -KeepCurrent, -InstallRoot/current stays where it is, so a new build can be tried from
+its own folder before callers move to it.
+
 Older version folders are kept; move them away by hand when no server runs from them.
 
 .EXAMPLE
@@ -31,7 +34,8 @@ param(
     [string] $InstallRoot,
     [string] $Toolchain = '',
     [int] $Jobs = 4,
-    [switch] $TmuxName
+    [switch] $TmuxName,
+    [switch] $KeepCurrent
 )
 
 $ErrorActionPreference = 'Stop'
@@ -65,11 +69,13 @@ if ($TmuxName) {
     Copy-Item (Join-Path $folder 'libexec/rmux/rmux.exe') (Join-Path $folder 'tmux-bin/tmux.exe')
 }
 $current = Join-Path $InstallRoot 'current'
-if (Test-Path $current) {
-    Move-Item $current (Join-Path $InstallRoot "previous-$(Get-Date -Format yyyyMMddHHmmss)")
+if (-not $KeepCurrent) {
+    if (Test-Path $current) {
+        Move-Item $current (Join-Path $InstallRoot "previous-$(Get-Date -Format yyyyMMddHHmmss)")
+    }
+    New-Item -ItemType Junction -Path $current -Target $folder | Out-Null
 }
-New-Item -ItemType Junction -Path $current -Target $folder | Out-Null
 
 Write-Output "installed=$folder"
-Write-Output "current=$current"
+Write-Output "current=$((Get-Item $current -ErrorAction SilentlyContinue).Target)"
 $output | Where-Object { $_ -match '^(package|sha256|binary_sha256|helper_binary_sha256|daemon_binary_sha256)=' }

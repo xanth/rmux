@@ -53,13 +53,14 @@ Every patch must be:
 
 | Fix branch | Problem | Platforms | Upstream status |
 |---|---|---|---|
-| `fix/windows-socket-path` | `-S <file path>` is refused on Windows, so tmux scripts cannot name a private server. Maps the path to an RMUX-derived per-user pipe; foreign pipe names stay refused | Windows | None. Upstream added the refusal in `9dd43c33`; the patch keeps its rule (only RMUX-derived pipes) |
-| `fix/windows-daemon-launch` | (1) Through the tiny dispatcher, a caller that captures output hangs until the daemon exits: the dispatcher's handles leak into the daemon. (2) Under a job that forbids breakaway (Task Scheduler, services, hosted CI), every daemon start fails; the daemon now starts inside a caller job that cannot kill it | Windows | None. (2) changes the policy of `7069f01e`; the patch keeps its rule (the daemon outlives the launcher) |
+| `fix/windows-socket-path` | When RMUX runs as tmux, `-S <file path>` is refused on Windows, so tmux tools cannot name a private server. The tmux-compatible resolver maps the path to an RMUX-derived per-user pipe; the rmux CLI and SDK keep the refusal, and foreign pipe names stay refused | Windows | None. Upstream added the refusal in `9dd43c33` and points rmux users at `-L`; the patch keeps that for the rmux CLI and changes only the tmux drop-in surface, as the Claude swarm redirect does |
+| `fix/windows-daemon-launch` | (1) Through the tiny dispatcher, a caller that captures output hangs until the daemon exits: the dispatcher's handles leak into the daemon. (2) Under a job that forbids breakaway (Task Scheduler, services, hosted CI), every daemon start fails; the daemon now starts inside a caller job that cannot kill it | Windows | None. (2) changes the policy of `7069f01e`; the patch keeps its rule (the daemon outlives the launcher). An explicit opt-in is the fallback if upstream wants one |
 | `fix/queue-start-server` | `set-option … ; new-session` in one invocation fails: only the first command could start the server | All | None |
 | `fix/paste-carriage-return` | `paste-buffer` sends each CR as the two characters `\r` | All | None |
-| `fix/windows-lone-program-path` | A lone pane command that is a program path with a space (`C:\Program Files\…`) is split by `cmd /S /C` and the pane exits | Windows | None |
-| `fix/dead-pane-exit` | (1) A Windows pane that exits during its deferred start never commits its exit: no remain-on-exit message, no pane-died hook, the session never closes. (2) The remain-on-exit message is not drawn as tmux draws it, so `capture-pane -J` differs | (1) Windows, (2) all | None |
-| `fix/control-ignore-size` | A control client cannot attach with `-f ignore-size` | All | None |
+| `fix/windows-lone-program-path` | (1) A lone pane command that is a program path with a space (`C:\Program Files\…`) is split by `cmd /S /C` and the pane exits. (2) Such a path, or a quoted first word, names the window and `#{pane_current_command}` `Program` | (1) Windows, (2) all | None |
+| `fix/dead-pane-exit` | (1) A Windows pane that exits during its deferred start never commits its exit; the exit now ends the start. (2) A format query could mark a kept pane dead before its exit committed, so the remain-on-exit message was skipped; queries now leave kept panes to the commit. (3) The remain-on-exit message is not drawn as tmux draws it, so `capture-pane -J` differs | (1) Windows, (2) and (3) all | None. (2) keeps `4a297ec2`'s prompt `pane_dead` for panes without remain-on-exit |
+| `fix/reflow-wrapped-row-extent` | Reflow joins a wrapped row that is not full at its full width, so its unwritten cells become spaces (a resized dead pane) | All | None |
+| `fix/control-ignore-size` | A control client cannot set `ignore-size` with `attach -f` or `refresh-client -f` | All | None |
 
 Update this table when you add, change or retire a fix.
 
@@ -134,7 +135,9 @@ describes each step. When a run fails, every fix is back where it started:
 packages `<commit>` (the `merged=` value) with RMUX's own packaging script,
 installs it in a new folder under `<dir>`, and points `<dir>/current` at it.
 Add `-Toolchain stable` when the pinned toolchain is missing and `-TmuxName` for
-a `tmux.exe`. Older folders stay, so servers that run from them keep working.
+a `tmux.exe`. Add `-KeepCurrent` to try a build from its own folder before
+`current` moves to it. Older folders stay, so servers that run from them keep
+working.
 
 ## Add a fix
 
